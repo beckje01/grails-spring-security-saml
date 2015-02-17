@@ -6,6 +6,8 @@ security {
 		afterLogoutUrl = '/'
 		userGroupAttribute = "memberOf"
 		responseSkew = 60
+		maxAssertionTime = 3000
+		maxAuthenticationAge = 7200
 		autoCreate {
 			active =  false
 			key = 'username'

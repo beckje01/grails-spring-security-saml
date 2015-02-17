@@ -268,6 +268,8 @@ SAML 2.x support for the Spring Security Plugin
 		
 		webSSOprofileConsumer(WebSSOProfileConsumerImpl){
 			responseSkew = conf.saml.responseSkew
+			maxAuthenticationAge = conf.saml.maxAuthenticationAge
+			maxAssertionTime = conf.saml.maxAssertionTime
 		}
 		
 		webSSOprofile(WebSSOProfileImpl)
