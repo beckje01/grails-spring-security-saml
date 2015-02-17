@@ -88,7 +88,7 @@ class SpringSamlUserDetailsService extends GormUserDetailsService implements SAM
 
 		if (samlUserAttributeMappings?.username) {
 
-			def attribute = credential.getAttributeByName(samlUserAttributeMappings.username)
+			def attribute = credential.getAttribute(samlUserAttributeMappings.username)
 			def value = attribute?.attributeValues?.value
 			return value?.first()
 		} else {
@@ -99,11 +99,18 @@ class SpringSamlUserDetailsService extends GormUserDetailsService implements SAM
 
 	protected Object mapAdditionalAttributes(credential, user) {
 		samlUserAttributeMappings.each { key, value ->
-			def attribute = credential.getAttributeByName(value)
-			def samlValue = attribute?.attributeValues?.value
-			if (samlValue) {
-				user."$key" = samlValue?.first()
-			}
+			if (user."$key" instanceof String) {
+				def attrValue = credential.getAttributeAsString(value)
+				user."$key" = attrValue
+			} else {
+				def attributes = credential.getAttributeAsStringArray(value)
+				attributes?.each() { attrValue ->
+					if (! user."$key") {
+						user."$key" = []
+					}
+					user."$key" << attrValue
+				}
+                        }
 		}
 		user
 	}
@@ -120,6 +127,9 @@ class SpringSamlUserDetailsService extends GormUserDetailsService implements SAM
 			if (authority) {
 				authorities.add(new GrantedAuthorityImpl(authority."$authorityNameField"))
 			}
+		}
+		if ( authorities.size() == 0 ) {
+			authorities.add(GormUserDetailsService.NO_ROLE)
 		}
 
 		return authorities
@@ -139,22 +149,20 @@ class SpringSamlUserDetailsService extends GormUserDetailsService implements SAM
 		def userGroups = []
 
 		if (samlUserGroupAttribute) {
-			def attributes = credential.getAttributeByName(samlUserGroupAttribute)
-
-			attributes.each { attribute ->
-				attribute.attributeValues?.each { attributeValue ->
-					log.debug "Processing group attribute value: ${attributeValue}"
-
-					def groupString = attributeValue.value
+			def attributeValues = credential.getAttributeAsStringArray(samlUserGroupAttribute)
+			attributeValues.each { groupString ->
+				def groupStringValue = groupString
+				if ( groupString.startsWith("CN") ) {
 					groupString?.tokenize(',').each { token ->
 						def keyValuePair = token.tokenize('=')
-
 						if (keyValuePair.first() == 'CN') {
-							userGroups << keyValuePair.last()
+							groupStringValue = keyValuePair.last()
 						}
 					}
 				}
+				userGroups << groupStringValue
 			}
+				
 		}
 
 		userGroups
@@ -186,7 +194,13 @@ class SpringSamlUserDetailsService extends GormUserDetailsService implements SAM
 			userClazz.withTransaction {
 				def existingUser = userClazz.findWhere(whereClause)
 				if (!existingUser) {
-					if (!user.save()) throw new UsernameNotFoundException("Could not save user ${user}");
+					if (!user.save()) {
+						def save_errors=""
+						user.errors.each {
+							save_errors+=it
+						}
+						throw new UsernameNotFoundException("Could not save user ${user} - ${save_errors}");
+					}               
 				} else {
 					user = updateUserProperties(existingUser, user)
 
